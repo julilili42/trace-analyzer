@@ -1,0 +1,97 @@
+from dataclasses import dataclass
+from pathlib import Path
+from time import perf_counter
+
+from trace_analyzer.importer import Importer
+from trace_analyzer.exporter import Exporter
+from trace_analyzer.analyzer import Analyzer
+
+
+@dataclass(frozen=True)
+class PipelineConfig:
+    frame_size: int = 64
+    window_ms: float = 10.0
+    link_speed_mbit: float = 100.0
+
+
+@dataclass(frozen=True)
+class PipelineTimings:
+    total_wall_time_s: float
+    import_time_s: float
+    analyze_time_s: float
+    export_time_s: float
+
+
+@dataclass(frozen=True)
+class PipelineArtifacts:
+    stats_json: Path
+    busload_json: Path
+    busload_csv: Path
+    anomalies_json: Path
+    anomalies_csv: Path
+
+
+@dataclass(frozen=True)
+class PipelineResult:
+    input_path: Path
+    output_dir: Path
+    row_count: int
+    timings: PipelineTimings
+    artifacts: PipelineArtifacts
+
+
+class Pipeline:
+    def __init__(self, config: PipelineConfig | None = None):
+        self.config = config or PipelineConfig()
+
+    def run(self, input_path: str | Path, output_path: str | Path) -> PipelineResult:
+        input_path = Path(input_path)
+        output_path = Path(output_path)
+
+        total_start = perf_counter()
+
+        # import
+        import_start = perf_counter()
+        df = Importer.import_csv(input_path)
+        import_time_s = perf_counter() - import_start
+
+        # analyze
+        analyze_start = perf_counter()
+        analyzer = Analyzer(df)
+        stats = analyzer.calc_stats(frame_size=self.config.frame_size)
+        busload = analyzer.bus_load(
+            window_ms=self.config.window_ms,
+            link_speed_mbit=self.config.link_speed_mbit,
+        )
+        anomalies = analyzer.detect_anomalies()
+        analyze_time_s = perf_counter() - analyze_start
+
+        # export
+        export_start = perf_counter()
+        exporter = Exporter(output_path)
+        artifacts = PipelineArtifacts(
+            stats_json=exporter.export_stats_json(stats, "stats.json"),
+            busload_json=exporter.export_dataframe_json(
+                busload, "busload.json"),
+            busload_csv=exporter.export_dataframe_csv(busload, "busload.csv"),
+            anomalies_json=exporter.export_dataframe_json(
+                anomalies, "anomalies.json"),
+            anomalies_csv=exporter.export_dataframe_csv(
+                anomalies, "anomalies.csv"),
+        )
+        export_time_s = perf_counter() - export_start
+
+        timings = PipelineTimings(
+            total_wall_time_s=perf_counter() - total_start,
+            import_time_s=import_time_s,
+            analyze_time_s=analyze_time_s,
+            export_time_s=export_time_s,
+        )
+
+        return PipelineResult(
+            input_path=input_path,
+            output_dir=exporter.output_dir,
+            row_count=len(df),
+            timings=timings,
+            artifacts=artifacts,
+        )
