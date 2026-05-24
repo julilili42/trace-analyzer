@@ -4,6 +4,7 @@ import tempfile
 import unittest
 from pathlib import Path
 
+from trace_analyzer.benchmark.profiles import BenchmarkProfile, BenchmarkProfileStore
 from trace_analyzer.benchmark.runner import BenchmarkRunner
 from trace_analyzer.pipeline import Pipeline
 
@@ -139,6 +140,39 @@ class PipelineBaselineTest(unittest.TestCase):
             self.assertEqual(first_record["payload_sizes"], [64, 1500])
             self.assertEqual(first_record["latency_min_ms"], 1.5)
             self.assertEqual(first_record["latency_max_ms"], 2.5)
+
+    def test_benchmark_profile_store_saves_and_loads_profiles(self) -> None:
+        with tempfile.TemporaryDirectory() as temp_dir:
+            store = BenchmarkProfileStore(Path(temp_dir) / "profiles")
+            profile = BenchmarkProfile(
+                name="quick_check_10k",
+                description="Fast code-under-test check",
+                runs=1,
+                warmups=0,
+                trace_count=10,
+                dataset_seed=99,
+                payload_sizes=(64, 512),
+                latency_min_ms=0.5,
+                latency_max_ms=1.5,
+                frame_size=128,
+                window_ms=5.0,
+                link_speed_mbit=1000.0,
+            )
+
+            path = store.save(profile)
+            loaded = store.load("quick_check_10k")
+
+            self.assertTrue(path.exists())
+            self.assertEqual(store.list_profiles(), ["quick_check_10k"])
+            self.assertEqual(loaded.name, "quick_check_10k")
+            self.assertEqual(loaded.description, profile.description)
+            self.assertEqual(loaded.trace_count, 10)
+            self.assertEqual(loaded.payload_sizes, (64, 512))
+            self.assertEqual(loaded.latency_min_ms, 0.5)
+            self.assertEqual(loaded.latency_max_ms, 1.5)
+            self.assertEqual(loaded.frame_size, 128)
+            self.assertEqual(loaded.window_ms, 5.0)
+            self.assertEqual(loaded.link_speed_mbit, 1000.0)
 
 
 if __name__ == "__main__":

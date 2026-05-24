@@ -25,9 +25,9 @@ class Stats:
 class Analyzer:
     def __init__(self, df: DataFrame):
         self.df = df
-        self.stats: dict[str, Stats] = {}
 
     def calc_stats(self, frame_size: int = 64) -> dict[str, Stats]:
+        stats: dict[str, Stats] = {}
         stream_group = self.df.groupby("stream_id")
 
         payload = stream_group["payload_bytes"].agg(
@@ -42,7 +42,7 @@ class Analyzer:
         )
 
         for stream_id in payload.index:
-            self.stats[stream_id] = Stats(
+            stats[stream_id] = Stats(
                 payload=Payload(
                     max=payload.loc[stream_id, "max"],
                     mean=payload.loc[stream_id, "mean"],
@@ -54,7 +54,7 @@ class Analyzer:
                 ),
             )
 
-        return self.stats
+        return stats
 
     def detect_anomalies(self) -> DataFrame:
         df = self.df.copy()

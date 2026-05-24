@@ -77,6 +77,52 @@ Recorded KPIs include:
 `tracemalloc` measures Python allocations. Native memory used by pandas/numpy
 is not fully covered, but the metric is still useful as a stable first baseline.
 
+## Benchmark profiles
+
+Benchmark profiles store the full code-under-test setup as JSON: dataset
+parameters, pipeline parameters, runs, warmups, and output locations.
+
+Create a profile from CLI options:
+
+```bash
+uv run python -m trace_analyzer.benchmark.runner \
+  --create-profile runtime_100k \
+  --profile-description "Primary profile for comparing code versions" \
+  --trace-count 100000 \
+  --runs 10 \
+  --warmups 2 \
+  --payload-sizes 64,128,256,512,1024,1280,1500 \
+  --latency-min-ms 0.2 \
+  --latency-max-ms 5.0
+```
+
+Profiles are written to `benchmark_profiles/<name>.json`.
+
+List profiles:
+
+```bash
+uv run python -m trace_analyzer.benchmark.runner --list-profiles
+```
+
+Run a profile:
+
+```bash
+uv run python -m trace_analyzer.benchmark.runner --profile runtime_100k
+```
+
+Included profiles:
+
+- `quick_check_10k`: fast sanity check for the benchmark path, not for performance comparison
+- `no_warmup_100k`: one measured run without warmup to observe first-run behavior
+- `runtime_100k`: primary profile for comparing code versions locally
+- `runtime_500k`: medium-large profile for checking scaling after an optimization
+- `runtime_1m`: larger local profile for scalability validation
+- `stability_100k`: many repeats on the standard dataset to estimate variance and median stability
+
+The runtime profiles intentionally keep payload sizes, latency range, pipeline
+configuration, and seed fixed. The comparison variable should be the code
+version, not analyzer-specific input semantics.
+
 ## Generate input data
 
 ```bash

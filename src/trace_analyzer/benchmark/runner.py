@@ -14,6 +14,11 @@ from trace_analyzer.benchmark.dataset import (
     TraceDatasetProvider,
 )
 from trace_analyzer.benchmark.models import BenchmarkRecord
+from trace_analyzer.benchmark.profiles import (
+    DEFAULT_PROFILE_DIR,
+    BenchmarkProfile,
+    BenchmarkProfileStore,
+)
 from trace_analyzer.benchmark.recorder import JsonlRecorder
 from trace_analyzer.pipeline import Pipeline, PipelineConfig, PipelineResult
 
@@ -223,16 +228,86 @@ def _parse_payload_sizes(value: str) -> tuple[int, ...]:
         ) from exc
 
 
+def _profile_from_args(args: argparse.Namespace, name: str) -> BenchmarkProfile:
+    return BenchmarkProfile(
+        name=name,
+        description=args.profile_description,
+        input_path=args.input_path,
+        output_root=args.output_root,
+        results_file=args.results_file,
+        runs=args.runs,
+        warmups=args.warmups,
+        scenario=args.scenario,
+        trace_count=args.trace_count,
+        dataset_seed=args.dataset_seed,
+        generated_input_dir=args.generated_input_dir,
+        payload_sizes=args.payload_sizes,
+        latency_min_ms=args.latency_min_ms,
+        latency_max_ms=args.latency_max_ms,
+        frame_size=args.frame_size,
+        window_ms=args.window_ms,
+        link_speed_mbit=args.link_speed_mbit,
+    )
+
+
+def _runner_from_profile(profile: BenchmarkProfile) -> BenchmarkRunner:
+    config = PipelineConfig(
+        frame_size=profile.frame_size,
+        window_ms=profile.window_ms,
+        link_speed_mbit=profile.link_speed_mbit,
+    )
+    return BenchmarkRunner(
+        input_path=profile.input_path,
+        output_root=profile.output_root,
+        results_file=profile.results_file,
+        runs=profile.runs,
+        warmups=profile.warmups,
+        scenario=profile.scenario_name(),
+        pipeline_config=config,
+        trace_count=profile.trace_count,
+        dataset_seed=profile.dataset_seed,
+        generated_input_dir=profile.generated_input_dir,
+        payload_sizes=profile.payload_sizes,
+        latency_min_ms=profile.latency_min_ms,
+        latency_max_ms=profile.latency_max_ms,
+    )
+
+
 def parse_args() -> argparse.Namespace:
     parser = argparse.ArgumentParser(
         description="Run trace analyzer benchmarks.")
     parser.add_argument("input_path", nargs="?", default="input_data/data.csv")
+    parser.add_argument("--profile", help="Run a saved benchmark profile.")
+    parser.add_argument(
+        "--profile-dir",
+        default=str(DEFAULT_PROFILE_DIR),
+        help="Directory containing benchmark profile JSON files.",
+    )
+    parser.add_argument(
+        "--list-profiles",
+        action="store_true",
+        help="List saved benchmark profiles and exit.",
+    )
+    parser.add_argument(
+        "--create-profile",
+        help="Create a benchmark profile from the current CLI options and exit.",
+    )
+    parser.add_argument(
+        "--overwrite-profile",
+        action="store_true",
+        help="Overwrite an existing profile when used with --create-profile.",
+    )
+    parser.add_argument(
+        "--profile-description",
+        default="",
+        help="Description stored when creating a profile.",
+    )
     parser.add_argument("--output-root", default="output_data/benchmark_runs")
     parser.add_argument(
         "--results-file", default="benchmark_results/results.jsonl")
     parser.add_argument("--runs", type=int, default=5)
     parser.add_argument("--warmups", type=int, default=1)
-    parser.add_argument("--scenario", default="baseline")
+    parser.add_argument("--scenario", default=None)
     parser.add_argument(
         "--trace-count",
         type=int,
@@ -278,26 +353,28 @@ def parse_args() -> argparse.Namespace:
 
 def main() -> None:
     args = parse_args()
-    config = PipelineConfig(
-        frame_size=args.frame_size,
-        window_ms=args.window_ms,
-        link_speed_mbit=args.link_speed_mbit,
-    )
-    runner = BenchmarkRunner(
-        input_path=args.input_path,
-        output_root=args.output_root,
-        results_file=args.results_file,
-        runs=args.runs,
-        warmups=args.warmups,
-        scenario=args.scenario,
-        pipeline_config=config,
-        trace_count=args.trace_count,
-        dataset_seed=args.dataset_seed,
-        generated_input_dir=args.generated_input_dir,
-        payload_sizes=args.payload_sizes,
-        latency_min_ms=args.latency_min_ms,
-        latency_max_ms=args.latency_max_ms,
-    )
+    store = BenchmarkProfileStore(args.profile_dir)
+
+    if args.list_profiles:
+        profiles = store.list_profiles()
+        if profiles:
+            print("\n".join(profiles))
+        else:
+            print(f"no profiles found in {store.profile_dir}")
+        return
+
+    if args.create_profile:
+        profile = _profile_from_args(args, name=args.create_profile)
+        path = store.save(profile, overwrite=args.overwrite_profile)
+        print(f"wrote profile {profile.name} to {path}")
+        return
+
+    if args.profile:
+        profile = store.load(args.profile)
+    else:
+        profile = _profile_from_args(args, name=args.scenario or "baseline")
+
+    runner = _runner_from_profile(profile)
     records = runner.run()
     print(f"wrote {len(records)} benchmark records to {runner.results_file}")
 

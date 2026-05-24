@@ -1,0 +1,27 @@
+{
+  "dataset_seed": 42,
+  "description": "Higher-repeat runtime profile for estimating variance and median stability on the standard 100k dataset.",
+  "frame_size": 64,
+  "generated_input_dir": "input_data/",
+  "input_path": "input_data/data.csv",
+  "latency_max_ms": 5.0,
+  "latency_min_ms": 0.2,
+  "link_speed_mbit": 100.0,
+  "name": "stability_100k",
+  "output_root": "output_data/benchmark_runs",
+  "payload_sizes": [
+    64,
+    128,
+    256,
+    512,
+    1024,
+    1280,
+    1500
+  ],
+  "results_file": "benchmark_results/results.jsonl",
+  "runs": 30,
+  "scenario": null,
+  "trace_count": 100000,
+  "warmups": 3,
+  "window_ms": 10.0
+}
