@@ -17,16 +17,29 @@ class Latency:
 
 
 @dataclass
+class Busload:
+    min: float
+    max: float
+    mean: float
+
+
+@dataclass
 class Stats:
     payload: Payload
     latency: Latency
+    busload: Busload
 
 
 class Analyzer:
     def __init__(self, df: DataFrame):
         self.df = df
 
-    def calc_stats(self, frame_size: int = 64) -> dict[str, Stats]:
+    def calc_stats(
+        self,
+        frame_size: int = 64,
+        window_ms: float = 10,
+        link_speed_mbit: float = 100,
+    ) -> dict[str, Stats]:
         stats: dict[str, Stats] = {}
         stream_group = self.df.groupby("stream_id")
 
@@ -41,6 +54,11 @@ class Analyzer:
             mean="mean",
         )
 
+        busload = self._calc_busload_stats(
+            window_ms=window_ms,
+            link_speed_mbit=link_speed_mbit,
+        )
+
         for stream_id in payload.index:
             stats[stream_id] = Stats(
                 payload=Payload(
@@ -52,37 +70,35 @@ class Analyzer:
                     max=latency.loc[stream_id, "max"],
                     mean=latency.loc[stream_id, "mean"],
                 ),
+                busload=Busload(
+                    min=busload.loc[stream_id, "min"],
+                    max=busload.loc[stream_id, "max"],
+                    mean=busload.loc[stream_id, "mean"],
+                ),
             )
 
         return stats
 
-    def detect_anomalies(self) -> DataFrame:
-        df = self.df.copy()
+    def _calc_busload_stats(
+        self,
+        window_ms: float,
+        link_speed_mbit: float,
+    ) -> DataFrame:
+        if window_ms <= 0:
+            raise ValueError("window_ms must be greater than 0")
 
-        df["high_latency"] = df.groupby("stream_id")["latency_ms"].transform(
-            lambda x: x > x.quantile(0.95)
-        )
+        if link_speed_mbit <= 0:
+            raise ValueError("link_speed_mbit must be greater than 0")
 
-        df["large_payload"] = df.groupby("stream_id")["payload_bytes"].transform(
-            lambda x: x > x.quantile(0.95)
-        )
-
-        df["is_anomaly"] = df["high_latency"] | df["large_payload"]
-
-        return df
-
-    def bus_load(self, window_ms: float = 10, link_speed_mbit: float = 100) -> DataFrame:
         df = self.df.copy()
 
         df["window_start_ms"] = (df["timestamp_ms"] // window_ms) * window_ms
 
         busload = (
-            df.groupby("window_start_ms")
+            df.groupby(["stream_id", "window_start_ms"])
             .agg(
-                frames=("payload_bytes", "count"),
                 payload_bytes_total=("payload_bytes", "sum"),
             )
-            .reset_index()
         )
 
         window_seconds = window_ms / 1000
@@ -93,7 +109,9 @@ class Analyzer:
             busload["payload_bits_total"] / max_bits_per_window * 100
         )
 
-        return busload
+        return busload.groupby(level="stream_id")["busload_percent"].agg(
+            ["min", "max", "mean"]
+        )
 
     def sum_frames(self, x, frame_size: int) -> int:
         if frame_size <= 0:

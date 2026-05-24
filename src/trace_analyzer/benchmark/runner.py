@@ -188,18 +188,13 @@ def _hash_directory(path: Path) -> str:
 
 
 def _validate_outputs(result: PipelineResult) -> str:
-    artifacts = (
-        result.artifacts.stats_json,
-        result.artifacts.busload_json,
-        result.artifacts.busload_csv,
-        result.artifacts.anomalies_json,
-        result.artifacts.anomalies_csv,
-    )
-
     if result.row_count <= 0:
         return "failed_empty_input"
 
-    if not all(path.exists() and path.stat().st_size > 0 for path in artifacts):
+    if (
+        not result.artifacts.stats_json.exists()
+        or result.artifacts.stats_json.stat().st_size <= 0
+    ):
         return "failed_missing_output"
 
     return "passed"

@@ -12,7 +12,7 @@ Importer -> Analyzer -> Exporter
 ```
 
 `trace_analyzer.pipeline.Pipeline` orchestrates these stages and returns a
-`PipelineResult` with row count, generated artifacts, and per-stage timings.
+`PipelineResult` with row count, generated `stats.json`, and per-stage timings.
 
 
 
@@ -53,8 +53,8 @@ Each measured run writes one record to:
 benchmark_results/results.jsonl
 ```
 
-Each run writes pipeline artifacts under `output_data/benchmark_runs/`. This
-directory is ignored by git because it can become large.
+Each run writes `stats.json` under `output_data/benchmark_runs/`. This directory
+is ignored by git because it can become large.
 
 Recorded KPIs include:
 

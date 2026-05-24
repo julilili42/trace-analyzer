@@ -25,10 +25,6 @@ class PipelineTimings:
 @dataclass(frozen=True)
 class PipelineArtifacts:
     stats_json: Path
-    busload_json: Path
-    busload_csv: Path
-    anomalies_json: Path
-    anomalies_csv: Path
 
 
 @dataclass(frozen=True)
@@ -58,12 +54,11 @@ class Pipeline:
         # analyze
         analyze_start = perf_counter()
         analyzer = Analyzer(df)
-        stats = analyzer.calc_stats(frame_size=self.config.frame_size)
-        busload = analyzer.bus_load(
+        stats = analyzer.calc_stats(
+            frame_size=self.config.frame_size,
             window_ms=self.config.window_ms,
             link_speed_mbit=self.config.link_speed_mbit,
         )
-        anomalies = analyzer.detect_anomalies()
         analyze_time_s = perf_counter() - analyze_start
 
         # export
@@ -71,13 +66,6 @@ class Pipeline:
         exporter = Exporter(output_path)
         artifacts = PipelineArtifacts(
             stats_json=exporter.export_stats_json(stats, "stats.json"),
-            busload_json=exporter.export_dataframe_json(
-                busload, "busload.json"),
-            busload_csv=exporter.export_dataframe_csv(busload, "busload.csv"),
-            anomalies_json=exporter.export_dataframe_json(
-                anomalies, "anomalies.json"),
-            anomalies_csv=exporter.export_dataframe_csv(
-                anomalies, "anomalies.csv"),
         )
         export_time_s = perf_counter() - export_start
 

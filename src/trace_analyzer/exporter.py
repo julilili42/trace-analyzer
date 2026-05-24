@@ -2,7 +2,6 @@ import json
 from pathlib import Path
 from dataclasses import asdict, is_dataclass
 import numpy as np
-from pandas import DataFrame
 
 
 class Exporter:
@@ -34,14 +33,4 @@ class Exporter:
         with path.open("w", encoding="utf-8") as f:
             json.dump(serializable, f, indent=2, default=self._json_default)
 
-        return path
-
-    def export_dataframe_json(self, df: DataFrame, filename: str) -> Path:
-        path = self.output_dir / filename
-        df.to_json(path, orient="records", indent=2)
-        return path
-
-    def export_dataframe_csv(self, df: DataFrame, filename: str) -> Path:
-        path = self.output_dir / filename
-        df.to_csv(path, index=False)
         return path

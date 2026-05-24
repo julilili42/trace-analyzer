@@ -48,9 +48,19 @@ class PipelineBaselineTest(unittest.TestCase):
             self.assertGreaterEqual(result.timings.analyze_time_s, 0)
             self.assertGreaterEqual(result.timings.export_time_s, 0)
 
-            for artifact in result.artifacts.__dict__.values():
-                self.assertTrue(artifact.exists())
-                self.assertGreater(artifact.stat().st_size, 0)
+            self.assertEqual(
+                sorted(path.name for path in output_dir.iterdir()),
+                ["stats.json"],
+            )
+            self.assertTrue(result.artifacts.stats_json.exists())
+            self.assertGreater(result.artifacts.stats_json.stat().st_size, 0)
+
+            stats = json.loads(result.artifacts.stats_json.read_text(encoding="utf-8"))
+            self.assertEqual(set(stats), {"A", "B"})
+            self.assertEqual(set(stats["A"]["busload"]), {"min", "max", "mean"})
+            self.assertAlmostEqual(stats["A"]["busload"]["min"], 0.24)
+            self.assertAlmostEqual(stats["A"]["busload"]["max"], 0.24)
+            self.assertAlmostEqual(stats["A"]["busload"]["mean"], 0.24)
 
     def test_benchmark_runner_records_jsonl(self) -> None:
         with tempfile.TemporaryDirectory() as temp_dir:
