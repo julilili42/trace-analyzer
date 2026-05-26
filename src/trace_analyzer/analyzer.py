@@ -1,5 +1,5 @@
 from dataclasses import dataclass
-from pandas import DataFrame
+from polars import DataFrame
 import numpy as np
 
 
@@ -41,13 +41,18 @@ class Analyzer:
         link_speed_mbit: float = 100,
     ) -> dict[str, Stats]:
         stats: dict[str, Stats] = {}
-        stream_codes = self.df["stream_id"].cat.codes.to_numpy(copy=False).astype(np.int64,
-                                                                                  copy=False)
-        stream_names = self.df["stream_id"].cat.categories
+
+        stream_codes = (
+            self.df["stream_id"]
+            .to_physical()
+            .to_numpy(writable=False)
+        )
+
+        stream_names = self.df["stream_id"].cat.get_categories()
         n_streams = len(stream_names)
 
-        payload = self.df["payload_bytes"].to_numpy(copy=False)
-        latency = self.df["latency_ms"].to_numpy(copy=False)
+        payload = self.df["payload_bytes"].to_numpy(writable=False)
+        latency = self.df["latency_ms"].to_numpy(writable=False)
 
         # payload & latency stats
         (payload_stats, latency_stats) = self._calc_payload_latency_stats(
@@ -57,6 +62,8 @@ class Analyzer:
         busload_stats = self._calc_busload_stats(
             window_ms=window_ms,
             link_speed_mbit=link_speed_mbit,
+            stream_codes=stream_codes,
+            stream_names=stream_names
         )
 
         for i, stream_id in enumerate(stream_names):
@@ -89,10 +96,12 @@ class Analyzer:
     ):
         # optimized mean + sum calculation
         # index of new array corresponds to streamcode, value corresponds to number of occurences
-        row_count = np.bincount(stream_codes)
+        row_count = np.bincount(stream_codes, minlength=n_streams)
         # summation based on stream codes
-        payload_sum = np.bincount(stream_codes, weights=payload)
-        latency_sum = np.bincount(stream_codes, weights=latency)
+        payload_sum = np.bincount(
+            stream_codes, weights=payload, minlength=n_streams)
+        latency_sum = np.bincount(
+            stream_codes, weights=latency, minlength=n_streams)
         # division of two 1xn arrays, where n = number of stream_codes
         payload_mean = payload_sum / row_count
         latency_mean = latency_sum / row_count
@@ -116,21 +125,19 @@ class Analyzer:
         self,
         window_ms: float,
         link_speed_mbit: float,
-    ) -> DataFrame:
+        stream_codes,
+        stream_names
+    ):
         if window_ms <= 0:
             raise ValueError("window_ms must be greater than 0")
 
         if link_speed_mbit <= 0:
             raise ValueError("link_speed_mbit must be greater than 0")
 
-        stream = self.df["stream_id"]
-        stream_codes = stream.cat.codes.to_numpy(copy=False).astype(np.int64,
-                                                                    copy=False)
-        stream_names = stream.cat.categories
         n_streams = len(stream_names)
 
-        timestamps = self.df["timestamp_ms"].to_numpy(copy=False)
-        payload = self.df["payload_bytes"].to_numpy(copy=False)
+        timestamps = self.df["timestamp_ms"].to_numpy(writable=False)
+        payload = self.df["payload_bytes"].to_numpy(writable=False)
 
         if float(window_ms).is_integer():
             window_bucket = timestamps // int(window_ms)
@@ -170,3 +177,30 @@ class Analyzer:
         busload_mean = busload_sum / busload_count
 
         return Busload(busload_min, busload_max, busload_mean)
+
+    @staticmethod
+    def stats_from_polars_df(df: DataFrame) -> tuple[dict[str, Stats], int]:
+        stats: dict[str, Stats] = {}
+        total_row_count = 0
+
+        for row in df.iter_rows(named=True):
+            stream_id = str(row["stream_id"])
+            total_row_count += int(row["row_count"])
+            stats[stream_id] = Stats(
+                payload=Payload(
+                    max=row["max_payload"],
+                    mean=float(row["mean_payload"]),
+                    sum_frames=int(row["sum_frames"]),
+                ),
+                latency=Latency(
+                    max=float(row["max_latency"]),
+                    mean=float(row["mean_latency"]),
+                ),
+                busload=Busload(
+                    min=float(row["busload_min"]),
+                    max=float(row["busload_max"]),
+                    mean=float(row["busload_mean"]),
+                ),
+            )
+
+        return stats, total_row_count

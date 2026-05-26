@@ -55,9 +55,11 @@ class PipelineBaselineTest(unittest.TestCase):
             self.assertTrue(result.artifacts.stats_json.exists())
             self.assertGreater(result.artifacts.stats_json.stat().st_size, 0)
 
-            stats = json.loads(result.artifacts.stats_json.read_text(encoding="utf-8"))
+            stats = json.loads(
+                result.artifacts.stats_json.read_text(encoding="utf-8"))
             self.assertEqual(set(stats), {"A", "B"})
-            self.assertEqual(set(stats["A"]["busload"]), {"min", "max", "mean"})
+            self.assertEqual(set(stats["A"]["busload"]), {
+                             "min", "max", "mean"})
             self.assertAlmostEqual(stats["A"]["busload"]["min"], 0.24)
             self.assertAlmostEqual(stats["A"]["busload"]["max"], 0.24)
             self.assertAlmostEqual(stats["A"]["busload"]["mean"], 0.24)
@@ -137,10 +139,13 @@ class PipelineBaselineTest(unittest.TestCase):
             with Path(records[0].input_path).open("r", encoding="utf-8") as f:
                 generated_rows = list(csv.DictReader(f))
 
-            payload_values = {int(row["payload_bytes"]) for row in generated_rows}
-            latency_values = [float(row["latency_ms"]) for row in generated_rows]
+            payload_values = {int(row["payload_bytes"])
+                              for row in generated_rows}
+            latency_values = [float(row["latency_ms"])
+                              for row in generated_rows]
             self.assertLessEqual(payload_values, {64, 1500})
-            self.assertTrue(all(1.5 <= value <= 2.5 for value in latency_values))
+            self.assertTrue(
+                all(1.5 <= value <= 2.5 for value in latency_values))
 
             lines = results_file.read_text(encoding="utf-8").splitlines()
             first_record = json.loads(lines[0])

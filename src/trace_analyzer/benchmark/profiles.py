@@ -49,7 +49,8 @@ class BenchmarkProfile:
             description=data.get("description", ""),
             input_path=data.get("input_path", "input_data/data.csv"),
             output_root=data.get("output_root", "output_data/benchmark_runs"),
-            results_file=data.get("results_file", "benchmark_results/results.jsonl"),
+            results_file=data.get(
+                "results_file", "benchmark_results/results.jsonl"),
             runs=int(data.get("runs", 5)),
             warmups=int(data.get("warmups", 1)),
             scenario=data.get("scenario"),
@@ -57,8 +58,10 @@ class BenchmarkProfile:
             dataset_seed=int(data.get("dataset_seed", 42)),
             generated_input_dir=data.get("generated_input_dir", "input_data/"),
             payload_sizes=tuple(int(size) for size in payload_sizes),
-            latency_min_ms=float(data.get("latency_min_ms", DEFAULT_LATENCY_MIN_MS)),
-            latency_max_ms=float(data.get("latency_max_ms", DEFAULT_LATENCY_MAX_MS)),
+            latency_min_ms=float(
+                data.get("latency_min_ms", DEFAULT_LATENCY_MIN_MS)),
+            latency_max_ms=float(
+                data.get("latency_max_ms", DEFAULT_LATENCY_MAX_MS)),
             frame_size=int(data.get("frame_size", 64)),
             window_ms=float(data.get("window_ms", 10.0)),
             link_speed_mbit=float(data.get("link_speed_mbit", 100.0)),

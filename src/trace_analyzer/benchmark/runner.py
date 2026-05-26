@@ -2,7 +2,6 @@ import argparse
 import gc
 import hashlib
 import subprocess
-import tracemalloc
 from datetime import datetime, timezone
 from pathlib import Path
 from uuid import uuid4
@@ -20,6 +19,7 @@ from trace_analyzer.benchmark.profiles import (
     BenchmarkProfileStore,
 )
 from trace_analyzer.benchmark.recorder import JsonlRecorder
+from trace_analyzer.benchmark.rss import RssSampler
 from trace_analyzer.pipeline import Pipeline, PipelineConfig, PipelineResult
 
 
@@ -69,7 +69,7 @@ class BenchmarkRunner:
         )
         self.input_path = self.dataset.path
 
-    def run(self) -> list[BenchmarkRecord]:
+    def run(self, lazy_loading: bool = False) -> list[BenchmarkRecord]:
         if self.verbose:
             source = "generated" if self.dataset.generated else "existing"
             print(
@@ -81,46 +81,48 @@ class BenchmarkRunner:
         # warmup runs
         # not included in benchmark
         for iteration in range(1, self.warmups + 1):
-            self._execute(iteration=iteration, is_warmup=True)
+            self._execute(iteration=iteration, is_warmup=True,
+                          lazy_loading=lazy_loading)
 
         # actual runs
         records: list[BenchmarkRecord] = []
         for iteration in range(1, self.runs + 1):
-            record = self._execute(iteration=iteration, is_warmup=False)
+            record = self._execute(iteration=iteration,
+                                   is_warmup=False, lazy_loading=lazy_loading)
             self.recorder.append(record)
             records.append(record)
             if self.verbose:
                 print(
                     f"run {iteration}/{self.runs}: "
                     f"total={record.total_wall_time_s:.4f}s, "
+                    f"import={record.import_time_s:.4f}s, "
+                    f"analyze={record.analyze_time_s:.4f}s, "
+                    f"export={record.export_time_s:.4f}s, "
                     f"rows/s={record.rows_per_second:.0f}, "
                     f"peak_memory={record.peak_memory_mb:.2f}MB"
                 )
 
         return records
 
-    def start_benchmark(self, iterations: int = 1) -> list[BenchmarkRecord]:
-        self.runs = iterations
-        return self.run()
-
-    def _execute(self, iteration: int, is_warmup: bool) -> BenchmarkRecord:
+    def _execute(self, iteration: int, is_warmup: bool, lazy_loading: bool) -> BenchmarkRecord:
         run_id = self._new_run_id(prefix="warmup" if is_warmup else "run")
         output_dir = self.output_root / self.scenario / run_id
 
         # collect unused references to standarize performance
         gc.collect()
 
-        # start timing process
-        tracemalloc.start()
-        result = self.pipeline.run(self.input_path, output_dir)
-        _, peak_memory_bytes = tracemalloc.get_traced_memory()
-        tracemalloc.stop()
+        # start timing and memory process
+        with RssSampler() as memory:
+            result = self.pipeline.run(
+                self.input_path, output_dir, lazy_loading)
+
+        peak_memory_mb = memory.peak_mb
 
         return self._record_from_result(
             result=result,
             run_id=run_id,
             iteration=iteration,
-            peak_memory_mb=peak_memory_bytes / 1024 / 1024,
+            peak_memory_mb=peak_memory_mb,
         )
 
     def _record_from_result(
@@ -343,6 +345,12 @@ def parse_args() -> argparse.Namespace:
     parser.add_argument("--frame-size", type=int, default=64)
     parser.add_argument("--window-ms", type=float, default=10.0)
     parser.add_argument("--link-speed-mbit", type=float, default=100.0)
+    parser.add_argument(
+        "--lazy-loading",
+        dest="lazy_loading",
+        action=argparse.BooleanOptionalAction,
+        default=False,
+    )
     return parser.parse_args()
 
 
@@ -370,7 +378,7 @@ def main() -> None:
         profile = _profile_from_args(args, name=args.scenario or "baseline")
 
     runner = _runner_from_profile(profile)
-    records = runner.run()
+    records = runner.run(lazy_loading=args.lazy_loading)
     print(f"wrote {len(records)} benchmark records to {runner.results_file}")
 
 
