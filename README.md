@@ -4,6 +4,24 @@ A Python trace analysis tool for synthetic Ethernet-like data. It imports trace
 CSV files, calculates per-stream payload, latency, and busload metrics, exports
 structured statistics, and records benchmark runs for performance comparison.
 
+## Get Started
+
+Install dependencies and run a small benchmark profile:
+
+```sh
+uv sync
+uv run python -m trace_analyzer.benchmark.runner --profile quick_check_10k
+```
+
+List available profiles with:
+
+```sh
+uv run python -m trace_analyzer.benchmark.runner --list-profiles
+```
+
+Benchmark results are written to `benchmark_results/results.jsonl`; generated
+inputs and outputs go into `input_data/` and `output_data/`.
+
 ## Why this project exists
 
 This project explores data pipeline performance, repeatable benchmarking,
